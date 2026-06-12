@@ -1,0 +1,96 @@
+# =====================================================================
+# config.yaml — L1Track plotter config
+#
+# Run:
+#   python -m plotter --config config.yaml             # both stages
+#   python -m plotter --config config.yaml --no-overlay  # fill only
+#   python -m plotter --config config.yaml --no-fill     # overlay only
+#
+# Override any value from the CLI:
+#   python -m plotter --config config.yaml --minPt 3.0 --tag v2
+# =====================================================================
+
+
+# Cut parameters
+cuts:
+  minPt:       2.0       # TP pT cut [GeV]
+  maxEta:      2.5       # |tp_eta| cut
+  minNstub:    4         # matchtrk_nstub cut
+  maxD0:       15        # |tp_d0|  cut [cm]
+  maxLxy:      10        # |tp_lxy|  cut [cm]
+  maxLz:       60        # |tp_lz|  cut [cm]
+  primaryOnly: false     # require tp_eventid == 0
+
+# Resolution-specific: extra pT-band splits. NOT IMPLEMENTED
+# Options: none | low | high | both
+# 'low'  -> additionally emit a curve restricted to tp_pt <  8 GeV
+# 'high' -> additionally emit a curve restricted to tp_pt >= 8 GeV
+# 'both' -> emit both
+# ptSplit: both
+
+
+# ---------------------------------------------------------------------
+# efficiency: which efficiency plots to produce.
+# Each variable is a positional block:
+#   [branch, nbins, xlo, xhi, xlabel, key]
+# key names both the output file (eff_<key>.pdf) and is used in titles.
+# ---------------------------------------------------------------------
+efficiency:
+  variables:
+    - ["tp_eta", 50, -2.5,  2.5,  "Tracking particle #eta",        "eta"]
+    - ["tp_phi", 32, -3.2,  3.2,  "Tracking particle #phi [rad]",  "phi"]
+    - ["tp_z0",  50, -25.0, 25.0, "Tracking particle z_{0} [cm]",  "z0" ]
+    - ["tp_d0",  100, -15.0,  15.0,  "Tracking particle d_{0} [cm]",  "d0" ]
+    - ["tp_pt",  47, 0,  100,  "Tracking particle p_T [GeV]",  "pt" ]
+
+# ---------------------------------------------------------------------
+# resolution: residuals × x-axes.
+# Each residual block:
+#   [key, residual_expr, extra_cut, nbins, lo, hi, ylabel, title]
+# extra_cut is ANDed onto the standard match cuts (e.g. d0 sentinel filter).
+#
+# Each x_axis block:
+#   [key, x_expr, nbins, xlo, xhi, xlabel]
+# Plots are produced for the Cartesian product (residual, x_axis).
+#
+# Each extra cut block makes a seperate directory with the listed cuts overlayed together
+# overlay_bool is whether to overlay with the other root files
+  # for example, to make a plot with 3 lines, there would be somethign like this:
+    # ["nstub", false, [["nstub >= 5", "matchtrk_nstub >= 5"], ["matchtrk_nstub >= 6"], 
+#   [key, overlay_bool, [[key1, cut 1, cut 2, ...], [key2, cut 1, cut2, ...], ...]]
+# ---------------------------------------------------------------------
+resolution:
+  residuals:
+    - ["pt", "(matchtrk_pt - tp_pt) / tp_pt", "",                  400,  -1.0,  1.0, "p_{T} resolution / p_{T}",   "p_{T} resolution"]
+    - ["eta",        "matchtrk_eta - tp_eta", "",                  400, -0.05, 0.05,          "#eta resolution",    "#eta resolution"]
+    - ["phi",        "matchtrk_phi - tp_phi", "",                  400, -0.05, 0.05,    "#phi resolution [rad]",    "#phi resolution"]
+    - ["z0",           "matchtrk_z0 - tp_z0", "",                  400,  -5.0,  5.0,    "z_{0} resolution [cm]",   "z_{0} resolution"]
+    - ["d0",           "matchtrk_d0 - tp_d0", "matchtrk_d0 < 999", 400,  -0.5,  0.5,    "d_{0} resolution [cm]",   "d_{0} resolution"]
+  x_axes:
+    - ["eta", "abs(tp_eta)", 25,   0.0,    2.5,   "|#eta|"]
+    - ["pt",  "tp_pt",       20,   0.0,  100.0,   "p_{T} [GeV]"]
+    - ["z0",  "tp_z0",       30, -15.0,   15.0,   "z_{0} [cm]"]
+    - ["d0",  "tp_d0",       30, -15.0,   15.0,   "d_{0} [cm]"]
+
+  # other_cuts:
+  #   - ["nstub", false, [["nstub >= 5", "matchtrk_nstub >= 5"], ["matchtrk_nstub >= 6"], 
+
+
+# Inputs: Make plots for each
+# `label` is the legend text.
+inputs:
+  - { file: "$CMS_DIR/tracking/data/10k_dmuonGun/5newkf_10000_dmuonGun_kill.root", label: "NEWKF Kill" }
+  - { file: "$CMS_DIR/tracking/data/10k_dmuonGun/5newkf_10000_dmuonGun_merge.root", label: "NEWKF MERGE" }
+  - { file: "$CMS_DIR/tracking/data/10k_dmuonGun/5oldkf_10000_dmuonGun.root", label: "OLDKF" }
+
+
+# Output:
+#   hist_file : stage-1 ROOT file (filled hists)
+#   outdir    : where overlayed hists are output as PDFs/PNGs.
+#   tag       : optional suffix appended to plot filenames.
+#   format    : 'pdf' or 'png'.
+output:
+  hist_file: "merge_v_kill_plots.root"
+  outdir:    "plots"
+  tag:       ""
+  format:    "pdf"
