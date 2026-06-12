@@ -79,9 +79,9 @@ resolution:
 # Inputs: Make plots for each
 # `label` is the legend text.
 inputs:
-  - { file: "$CMS_DIR/tracking/data/10k_dmuonGun/5newkf_10000_dmuonGun_kill.root", label: "NEWKF Kill" }
-  - { file: "$CMS_DIR/tracking/data/10k_dmuonGun/5newkf_10000_dmuonGun_merge.root", label: "NEWKF MERGE" }
-  - { file: "$CMS_DIR/tracking/data/10k_dmuonGun/5oldkf_10000_dmuonGun.root", label: "OLDKF" }
+  - { file: "file1.root", label: "NEWKF Kill" }
+  - { file: "file2.root", label: "NEWKF MERGE" }
+  - { file: "file3.root", label: "OLDKF" }
 
 
 # Output:
@@ -90,7 +90,7 @@ inputs:
 #   tag       : optional suffix appended to plot filenames.
 #   format    : 'pdf' or 'png'.
 output:
-  hist_file: "merge_v_kill_plots.root"
+  hist_file: "histograms.root"
   outdir:    "plots"
   tag:       ""
   format:    "pdf"
