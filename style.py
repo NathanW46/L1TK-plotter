@@ -1,9 +1,5 @@
 """Histogram styling for the L1Track plotter.
-
-Eight-color palette + matching marker shapes, cycled by index so the i-th
-overlaid curve always lands on COLORS[i] and MARKERS[i]. Identical to the
-palette used by ../overlay_eff.py:28-38 and ../overlay_res.py:36-46.
-"""
+Color palette + matching marker shapes for overlaying plots."""
 
 import ROOT
 
@@ -22,7 +18,7 @@ MARKERS = [20, 21, 22, 23, 33, 34, 29, 24]
 
 
 def style_hist(h, i, xlabel, ylabel, title):
-    """Apply the i-th color/marker to `h` and set its axis labels + title."""
+    """Apply i-th color/marker to `h` and set the labels + title."""
     c = COLORS[i % len(COLORS)]
     h.SetLineColor(c)
     h.SetMarkerColor(c)
