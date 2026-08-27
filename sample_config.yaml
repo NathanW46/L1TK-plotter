@@ -61,8 +61,7 @@ efficiency:
 # ---------------------------------------------------------------------
 resolution:
   # How resolution is defined per x-bin: 'interval' (half-width of the window
-  # holding a central fraction of entries) or 'rms'. NOTE: only 'interval' is
-  # implemented so far.
+  # holding 68% of entries) or 'rms'.
   method: interval
   residuals:
     - ["pt", "(matchtrk_pt - tp_pt) / tp_pt", "",                  400,  -1.0,  1.0, "p_{T} resolution / p_{T}",   "p_{T} resolution"]
@@ -76,8 +75,11 @@ resolution:
     - ["z0",  "tp_z0",       30, -15.0,   15.0,   "z_{0} [cm]"]
     - ["d0",  "tp_d0",       30, -15.0,   15.0,   "d_{0} [cm]"]
 
-  # other_cuts:
-  #   - ["nstub", false, [["nstub >= 5", "matchtrk_nstub >= 5"], ["matchtrk_nstub >= 6"], 
+  other_cuts:
+    - ["nstub", false,
+        [ ["nstub = 4", "matchtrk_nstub == 4"],
+          ["nstub = 5", "matchtrk_nstub == 5"],
+          ["nstub >= 6", "matchtrk_nstub >= 6"] ]]
 
 
 # Inputs: Make plots for each entry under `files`.
