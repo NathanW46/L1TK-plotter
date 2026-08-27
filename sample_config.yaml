@@ -60,6 +60,10 @@ efficiency:
 #   [key, overlay_bool, [[key1, cut 1, cut 2, ...], [key2, cut 1, cut2, ...], ...]]
 # ---------------------------------------------------------------------
 resolution:
+  # How resolution is defined per x-bin: 'interval' (half-width of the window
+  # holding a central fraction of entries) or 'rms'. NOTE: only 'interval' is
+  # implemented so far.
+  method: interval
   residuals:
     - ["pt", "(matchtrk_pt - tp_pt) / tp_pt", "",                  400,  -1.0,  1.0, "p_{T} resolution / p_{T}",   "p_{T} resolution"]
     - ["eta",        "matchtrk_eta - tp_eta", "",                  400, -0.05, 0.05,          "#eta resolution",    "#eta resolution"]
@@ -76,12 +80,17 @@ resolution:
   #   - ["nstub", false, [["nstub >= 5", "matchtrk_nstub >= 5"], ["matchtrk_nstub >= 6"], 
 
 
-# Inputs: Make plots for each
+# Inputs: Make plots for each entry under `files`.
 # `label` is the legend text.
+# `base_path` (optional): prepended to every `file` below, so you can set the
+#   shared directory once and list bare filenames.
+# (A plain list of entries — without base_path/files — is also accepted.)
 inputs:
-  - { file: "file1.root", label: "NEWKF Kill" }
-  - { file: "file2.root", label: "NEWKF MERGE" }
-  - { file: "file3.root", label: "OLDKF" }
+  base_path: ""
+  files:
+    - { file: "file1.root", label: "NEWKF Kill" }
+    - { file: "file2.root", label: "NEWKF MERGE" }
+    - { file: "file3.root", label: "OLDKF" }
 
 
 # Output:

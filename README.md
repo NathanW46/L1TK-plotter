@@ -6,12 +6,14 @@ Reads CMS L1 track ntuples from multiple files, then makes efficiency and resolu
 
 `python main.py --config sample_config.yaml`
 
+```
+python main.py --config sample_config.yaml --no-overlay
+python main.py --config sample_config.yaml --no-fill
+python main.py --config sample_config.yaml --only eff_eta
 
-`python main.py --config sample_config.yaml --no-overlay`
-`python main.py --config sample_config.yaml --no-fill`
-`python main.py --config sample_config.yaml --only eff_eta`
-Override any config argument:
-`python main.py --config sample_config.yaml --minPt 3.0` 
+# Override any config argument:
+python main.py --config sample_config.yaml --minPt 3.0
+```
 
 ---
 It runs in two stages
@@ -31,7 +33,17 @@ To run the plotter from other loations, optionally add the following script to p
 exec python $PATH_TO_PLOTTER/main.py "$@"
 ```
 
+### TODO
+- [ ] nstub pi chart
+- [ ] print duplicate rate etc
+- [ ] other cut blocks
+- [x] option to save proj hists
+- [x] option to overlay other cut blocks
+- [ ] General x y plotting options?
+- [ ] cut string validations
+- [ ] H/L pt regions
+- [ ] eta regions
 
 ### DISCLAIMER
-Unfortunately, a lot of this code is AI generated. All the overhead and config logistics, including plot overlays and i/o; HOWEVER, the plotting logic WAS implemented by myself.
+Unfortunately, a lot of this code is created with the help of AI (I know, I am an awful person). All the overhead and config logistics, including plot overlays and i/o; HOWEVER, the plotting logic WAS implemented by myself.
 

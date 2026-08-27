@@ -23,7 +23,7 @@ def style_hist(h, i, xlabel, ylabel, title):
     h.SetLineColor(c)
     h.SetMarkerColor(c)
     h.SetMarkerStyle(MARKERS[i % len(MARKERS)])
-    h.SetMarkerSize(0.9)
+    h.SetMarkerSize(0.72)
     h.SetLineWidth(2)
     h.GetXaxis().SetTitle(xlabel)
     h.GetYaxis().SetTitle(ylabel)

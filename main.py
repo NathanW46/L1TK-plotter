@@ -28,11 +28,25 @@ import rdfio
 # Plot modules and the overlay renderer are written separately. Import
 # lazily so `python main.py --help` and config validation still work before
 # they exist.
+# try:
+#     from plotters import efficiency, resolution
+# except ImportError:
+#     efficiency = None
+#     resolution = None
 try:
-    from plotters import efficiency, resolution
+    from plotters import efficiency
 except ImportError:
     efficiency = None
+
+try:
+    from plotters import resolution
+except ImportError:
     resolution = None
+
+try:
+    from plotters import nstub_piechart
+except ImportError:
+    nstub_piechart = None
 
 try:
     import overlay as overlay_mod
@@ -117,10 +131,18 @@ def stage_fill(cfg: cfg_mod.Config) -> None:
           f"{', '.join(i.label for i in cfg.inputs)}")
 
     with rdfio.hist_file_writer(cfg.output.hist_file) as f:
+        # Stash the effective config (post CLI overrides) so plots can be
+        # traced back to the setup that produced them. Stored as a TObjString
+        # named 'config' at the file root; read back with
+        #   f.Get("config").GetString().
+        f.WriteObject(ROOT.TObjString(cfg_mod.to_yaml(cfg)), "config")
         res_dir = f.mkdir("res")
         resolution.fill(cfg, rdfs, res_dir)
         eff_dir = f.mkdir("eff")
         efficiency.fill(cfg, rdfs, eff_dir)
+        if nstub_piechart is not None:
+            nstub_dir = f.mkdir("nstub")
+            nstub_piechart.fill(cfg, rdfs, nstub_dir)
     print(f"[fill] wrote {cfg.output.hist_file}")
 
 
@@ -144,11 +166,34 @@ def stage_overlay(cfg: cfg_mod.Config, only: set[str] | None) -> None:
                                         output=cfg.output, legend_corner="br",
                                         ymin=0, ymax=1,
                                         write_to=eff_overs)
-        for plot_key, curves in resolution.load(cfg, f.Get("res"), labels).items():
-            if only is None or plot_key in only:
-                overlay_mod.draw_overlay(curves, plot_key=plot_key,
-                                        output=cfg.output, legend_corner="tr",
-                                        write_to=res_overs)
+        res_top = f.Get("res")
+        for plot_key, curves in resolution.load(cfg, res_top, labels).items():
+            if only is not None and plot_key not in only:
+                continue
+            # Standard overlays (one curve per input) go under overlays/res.
+            # Extra-cut block plots instead live in the res/ source tree next
+            # to the hists they came from:
+            #   <block>/<label>/res_<tag>  -> res/<label>/<block>/
+            #   <block>/res_<tag>          -> res/<block>/   (overlaid inputs)
+            parts = plot_key.split("/")
+            if len(parts) == 1:
+                dest = res_overs
+            elif len(parts) == 2:
+                dest = rdfio.ensure_dir(res_top, parts[0])
+            else:
+                dest = rdfio.ensure_dir(rdfio.ensure_dir(res_top, parts[1]),
+                                        parts[0])
+            overlay_mod.draw_overlay(curves, plot_key=plot_key,
+                                    output=cfg.output, legend_corner="tr",
+                                    write_to=dest)
+
+        # nstub pie charts render one image per input (no overlay) plus a
+        # combined canvas of all pies, which lands in overlays/. The module
+        # saves the images and writes the canvas itself, returning nothing.
+        if nstub_piechart is not None:
+            nstub_top = f.Get("nstub")
+            if nstub_top:
+                nstub_piechart.load(cfg, nstub_top, labels, write_to=overlays)
     print(f"[overlay] wrote {cfg.output.outdir}/*.{cfg.output.format}")
     print(f"[overlay] also saved canvases to {cfg.output.hist_file}:/overlays/")
 
@@ -162,8 +207,15 @@ def main() -> None:
 
     if not args.no_fill:
         stage_fill(cfg)
+
+    # Overlay only makes sense across multiple inputs; with a single file
+    # there's nothing to overlay, so skip stage 2.
     if not args.no_overlay:
-        stage_overlay(cfg, only)
+        if len(cfg.inputs) < 2:
+            print(f"[overlay] skipped: only {len(cfg.inputs)} input file "
+                  "(need >= 2 to overlay)")
+        else:
+            stage_overlay(cfg, only)
 
 
 if __name__ == "__main__":

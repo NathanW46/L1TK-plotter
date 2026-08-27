@@ -97,13 +97,17 @@ def draw_overlay(
     for cu in curves[1:]:
         cu.hist.Draw("E1 SAME")
 
-    # legend placement
+    # legend placement. Width scales with the longest label so entries like
+    # "NEWKF MERGE  nstub == 4" aren't clipped; clamp so it can't grow past
+    # the left margin.
+    longest = max((len(cu.label) for cu in curves), default=0)
+    width = min(0.55, max(0.245, 0.011 * longest))
+    x2 = 0.9
+    x1 = x2 - width
     if legend_corner == "br":
-        x1, x2 = 0.655, 0.9
         y1 = 0.18
         y2 = y1 + 0.05 * len(curves)
     else:  # 'tr' (default)
-        x1, x2 = 0.655, 0.9
         y2 = 0.88
         y1 = y2 - 0.05 * len(curves)
 
@@ -117,12 +121,15 @@ def draw_overlay(
 
     c.Update()
 
-    os.makedirs(output.outdir, exist_ok=True)
     tag = f"_{output.tag}" if output.tag else ""
     out_path = os.path.join(output.outdir, f"{plot_key}{tag}.{output.format}")
+    # plot_key may contain '/' (e.g. extra-cut blocks live in sub-dirs), so
+    # create the full parent path, not just output.outdir.
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
     c.SaveAs(out_path)
     print(f"[overlay] wrote {out_path}")
 
     if write_to is not None:
         write_to.cd()
-        c.Write(plot_key)
+        # ROOT key names can't contain '/', so flatten any sub-dir path.
+        c.Write(plot_key.replace("/", "_"))
