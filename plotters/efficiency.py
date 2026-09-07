@@ -108,22 +108,37 @@ def fill(cfg: Config, rdfs, out_dir) -> None:
             h_num.Write()
             h_den.Write()
 
-            h_eff = ROOT.TH1F(f"eff_{x.key}", f";{x.xlabel};Efficiency", x.nbins, x.lo, x.hi)
+            # Efficiency as a TEfficiency rather than a hand-rolled ratio: it
+            # keeps the (passed, total) pair and derives the uncertainty from
+            # them with Clopper-Pearson intervals, which stay inside [0, 1] and
+            # remain meaningful at 0% / 100% where the naive binomial error
+            # collapses to zero. Errors are asymmetric, so stage 2 draws it as
+            # a graph rather than a histogram.
+            if not ROOT.TEfficiency.CheckConsistency(h_num, h_den):
+                print(f"[fill] {label}: passed/total inconsistent for "
+                      f"{x.key!r}, skipping efficiency")
+                continue
 
-            h_eff.Divide(h_num, h_den, 1, 1, "B")
+            h_eff = ROOT.TEfficiency(h_num, h_den)
+            h_eff.SetName(f"eff_{x.key}")
+            h_eff.SetTitle(f";{x.xlabel};Efficiency")
+            # ROOT's defaults, set explicitly so the interval is on the record.
+            h_eff.SetStatisticOption(ROOT.TEfficiency.kFCP)  # Clopper-Pearson
+            h_eff.SetConfidenceLevel(0.682689492137)         # 1 sigma
             h_eff.Write()
+            h_eff.SetDirectory(0)  # don't let f.Write() add a second cycle
 
 
                 
 
 def load(cfg: Config, in_dir, labels: list[str]) -> dict[str, list[Curve]]:
-    """Stage 2. Read filled efficiency TH1s, style them, package as Curves.
+    """Stage 2. Read the filled TEfficiencies, style them, package as Curves.
 
     Assumes fill() wrote, for each input label:
-        in_dir/<clean_label(label)>/eff_<v.key>     TH1
+        in_dir/<clean_label(label)>/eff_<v.key>     TEfficiency
 
     Returns dict[plot_key -> list[Curve]] keyed by 'eff_<v.key>' —
-    overlay.draw_overlay turns that into plots_out/eff_<v.key>.<format>.
+    overlay.draw_overlay draws those as points with asymmetric error bars.
     """
     result: dict[str, list[Curve]] = {}
 
@@ -141,10 +156,10 @@ def load(cfg: Config, in_dir, labels: list[str]) -> dict[str, list[Curve]]:
                 print(f"[load] missing eff_{v.key} in {label!r}")
                 continue
 
-            # Detach so the hist survives the TFile close in main.py
+            # Detach so the object survives the TFile close in main.py
             h.SetDirectory(0)
-            style.style_hist(h, i, v.xlabel, "Efficiency",
-                             f"Efficiency vs {v.key}")
+            style.style_eff(h, i, v.xlabel, "Efficiency",
+                            f"Efficiency vs {v.key}")
             curves.append(Curve(label=label, hist=h))
 
         if curves:

@@ -41,6 +41,40 @@ class Curve:
     extras: dict[str, Any] = field(default_factory=dict)
 
 
+def _draw_efficiencies(c, curves, plot_key, ymin, ymax):
+    """Draw a set of TEfficiency curves onto canvas `c`.
+
+    A TEfficiency has no axes of its own: it paints a TGraphAsymmErrors, and
+    the axis titles and ranges live on *that* graph — which ROOT marks
+    transient, so it is not streamed with the canvas and everything set on it
+    is lost when the canvas is read back out of the ROOT file. So draw an
+    explicit empty frame histogram first and hang the efficiencies on it with
+    "SAME": the frame is a real primitive, so the axes survive the round-trip
+    and the exported image matches what was drawn here.
+    """
+    # Clone the (already binned and labelled) total histogram for the frame, so
+    # the binning and axis titles come along for free.
+    frame = curves[0].hist.GetTotalHistogram().Clone(
+        f"frame_{plot_key.replace('/', '_')}")
+    frame.Reset()
+    frame.SetDirectory(0)
+    frame.SetStats(0)
+    frame.SetTitle(curves[0].hist.GetTitle())  # no ';' -> axis titles kept
+    frame.GetYaxis().SetTitleOffset(1.8)
+    frame.SetMinimum(0.0 if ymin is None else ymin)
+    frame.SetMaximum(1.15 if ymax is None else ymax)
+    # Default draw option, not "AXIS": "AXIS" suppresses the pad title. The
+    # frame was Reset(), so the only thing it paints is a line along y = 0,
+    # which lies under the x axis.
+    frame.Draw()
+
+    for cu in curves:
+        cu.hist.Draw("SAME P")
+
+    c._frame = frame  # keep the frame alive until the canvas is written
+    return frame
+
+
 def draw_overlay(
     curves: list[Curve],
     *,
@@ -81,7 +115,9 @@ def draw_overlay(
         ROOT draw option. "E1" (default) draws markers with error bars;
         "HIST" draws the bare connected-line histogram with no error bars and
         an unfilled base — used for interval-method resolutions, whose points
-        carry no meaningful per-bin error.
+        carry no meaningful per-bin error. Ignored for TEfficiency curves,
+        which are always drawn as points on an explicit frame (see
+        _draw_efficiencies).
     legend_opt
         TLegend entry option. Defaults to "lep" for error-bar styles and "l"
         for line-only styles, so the legend keys match what is drawn (a plain
@@ -99,24 +135,31 @@ def draw_overlay(
     c.SetLeftMargin(0.15)
     ROOT.gStyle.SetOptStat(0)
 
-    # y-axis range
-    auto_max = max(cu.hist.GetMaximum() for cu in curves)
-    auto_min = min(cu.hist.GetMinimum() for cu in curves)
-    if ymin is None:
-        ymin = 0.0 if auto_min >= 0 else 1.1 * auto_min
-    if ymax is None:
-        ymax = 1.15 * auto_max if auto_max > 0 else 1.0
+    is_eff = isinstance(curves[0].hist, ROOT.TEfficiency)
 
-    curves[0].hist.SetMinimum(ymin)
-    curves[0].hist.SetMaximum(ymax)
-    curves[0].hist.Draw(draw_opt)
-    for cu in curves[1:]:
-        cu.hist.Draw(f"{draw_opt} SAME")
+    if is_eff:
+        _draw_efficiencies(c, curves, plot_key, ymin, ymax)
+    else:
+        # y-axis range
+        auto_max = max(cu.hist.GetMaximum() for cu in curves)
+        auto_min = min(cu.hist.GetMinimum() for cu in curves)
+        if ymin is None:
+            ymin = 0.0 if auto_min >= 0 else 1.1 * auto_min
+        if ymax is None:
+            ymax = 1.15 * auto_max if auto_max > 0 else 1.0
+
+        curves[0].hist.SetMinimum(ymin)
+        curves[0].hist.SetMaximum(ymax)
+        curves[0].hist.Draw(draw_opt)
+        for cu in curves[1:]:
+            cu.hist.Draw(f"{draw_opt} SAME")
 
     # An "E"-less draw option paints no markers or error bars, so a "lep"
-    # legend key would advertise both. Fall back to a plain line key.
+    # legend key would advertise both. Fall back to a plain line key. A
+    # TEfficiency always paints markers with error bars.
     if legend_opt is None:
-        legend_opt = "lep" if "E" in draw_opt.upper().replace("HIST", "") else "l"
+        legend_opt = ("lep" if is_eff or
+                      "E" in draw_opt.upper().replace("HIST", "") else "l")
 
     # legend placement. Width scales with the longest label so entries like
     # "NEWKF MERGE  nstub == 4" aren't clipped; clamp so it can't grow past
