@@ -1,15 +1,19 @@
 """L1Track plotter — CLI entry point.
 
-Two-stage pipeline:
+Three-stage pipeline:
     stage 1 (fill):    open each input as an RDataFrame, fill histograms,
                        write them into output.hist_file.
     stage 2 (overlay): read those histograms back, draw per-input overlays,
-                       save as PDF/PNG into output.outdir.
+                       write the canvases into output.hist_file.
+    stage 3 (export):  mirror the whole ROOT file into output.outdir as a
+                       directory tree of PDF/PNG/TXT files — including the
+                       effective config and the per-input run summaries.
 
 Run from inside plotter/:
     python main.py --config config.yaml
     python main.py --config config.yaml --no-overlay      # fill only
     python main.py --config config.yaml --no-fill         # overlay only
+    python main.py --config config.yaml --no-export       # skip the file tree
     python main.py --config config.yaml --minPt 3.0 --tag v2
 """
 
@@ -58,6 +62,11 @@ try:
 except ImportError:
     overlay_mod = None
 
+try:
+    import export as export_mod
+except ImportError:
+    export_mod = None
+
 
 ROOT.gROOT.SetBatch(True)
 ROOT.gErrorIgnoreLevel = ROOT.kWarning
@@ -75,6 +84,8 @@ def parse_args() -> argparse.Namespace:
                    help="skip stage 1 (assume hist_file already exists)")
     p.add_argument("--no-overlay", action="store_true",
                    help="skip stage 2 (just fill the hist_file)")
+    p.add_argument("--no-export", action="store_true",
+                   help="skip stage 3 (don't mirror the hist_file into outdir)")
 
     # Plot subset
     p.add_argument("--only", default=None,
@@ -171,6 +182,13 @@ def stage_overlay(cfg: cfg_mod.Config, only: set[str] | None) -> None:
                                         output=cfg.output, legend_corner="br",
                                         ymin=0, ymax=1,
                                         write_to=eff_overs)
+        # Draw style follows resolution.method. The interval half-width has no
+        # meaningful per-bin error (fill() pins it to zero), so those plots are
+        # drawn as bare connected-line histograms with an unfilled base and a
+        # line-only legend. The RMS carries an RMS error, so it keeps markers
+        # and error bars.
+        res_draw = "HIST" if cfg.resolution.method == "interval" else "E1"
+
         res_top = f.Get("res")
         for plot_key, curves in resolution.load(cfg, res_top, labels).items():
             if only is not None and plot_key not in only:
@@ -190,7 +208,7 @@ def stage_overlay(cfg: cfg_mod.Config, only: set[str] | None) -> None:
                                         parts[0])
             overlay_mod.draw_overlay(curves, plot_key=plot_key,
                                     output=cfg.output, legend_corner="tr",
-                                    write_to=dest)
+                                    write_to=dest, draw_opt=res_draw)
 
         # nstub pie charts render one image per input (no overlay) plus a
         # combined canvas of all pies, which lands in overlays/. The module
@@ -199,8 +217,24 @@ def stage_overlay(cfg: cfg_mod.Config, only: set[str] | None) -> None:
             nstub_top = f.Get("nstub")
             if nstub_top:
                 nstub_piechart.load(cfg, nstub_top, labels, write_to=overlays)
-    print(f"[overlay] wrote {cfg.output.outdir}/*.{cfg.output.format}")
-    print(f"[overlay] also saved canvases to {cfg.output.hist_file}:/overlays/")
+    print(f"[overlay] wrote canvases to {cfg.output.hist_file}:/overlays/")
+
+
+def stage_summary(cfg: cfg_mod.Config, rdfs) -> None:
+    """Print the end-of-run summary and stash it in the ROOT file.
+
+    One TObjString per input under summary/, so stage 3 mirrors them out as
+    <outdir>/summary/<label>.txt alongside the plots they describe.
+    """
+    summaries = summary_mod.print_summary(cfg, rdfs, cfg.output.hist_file)
+
+    with rdfio.hist_file_updater(cfg.output.hist_file) as f:
+        d = rdfio.ensure_dir(f, "summary")
+        d.cd()
+        for label, text in summaries:
+            name = summary_mod.clean_label(label)
+            d.Delete(f"{name};*")   # replace, don't accumulate write cycles
+            d.WriteObject(ROOT.TObjString(text), name)
 
 
 def main() -> None:
@@ -225,7 +259,12 @@ def main() -> None:
     # End-of-run summary printout (mirrors L1TrackNtuplePlot.C), per input.
     if summary_mod is not None:
         rdfs = [(rdfio.open_rdf(i.file), i.label) for i in cfg.inputs]
-        summary_mod.print_summary(cfg, rdfs, cfg.output.hist_file)
+        stage_summary(cfg, rdfs)
+
+    # Stage 3: mirror the finished ROOT file into outdir as a directory tree.
+    if not args.no_export and export_mod is not None:
+        export_mod.dump_tree(cfg.output.hist_file, cfg.output.outdir,
+                             cfg.output.format, cfg.output.tag)
 
 
 if __name__ == "__main__":

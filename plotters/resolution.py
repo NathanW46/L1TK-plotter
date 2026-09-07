@@ -21,8 +21,8 @@ def clean_label(label):
 
 
 def base_cuts(rdf, p):
-    """Elementwise baseline TP selection. Cuts should match from 
-       L1TrackNtuplePlot.C. tp_lxy and tp_lz are first checked, 
+    """Elementwise baseline TP selection. Cuts should match from
+       L1TrackNtuplePlot.C. tp_lxy and tp_lz are first checked,
        and excluded if they do not exist."""
     col_names = {str(c) for c in rdf.GetColumnNames()}
 

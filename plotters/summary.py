@@ -10,6 +10,10 @@ the efficiency numerator/denominator definitions). Cut values come from
 cfg.cuts. The z0-resolution samples are read back from the resolution histogram
 res/<label>/res_z0_vs_eta written in stage 1 (interval method, matching the
 reference's h2_resVsEta_z0_68).
+
+`build_summaries` returns the text rather than printing it, so main.py can both
+echo it to the terminal and stash one TObjString per input in the ROOT file —
+which export.py then mirrors to <outdir>/summary/<label>.txt.
 """
 
 from __future__ import annotations
@@ -70,12 +74,18 @@ def _z0_res_samples(hist_file_path, label):
         f.Close()
 
 
-def print_summary(cfg: Config, rdfs, hist_file_path: str) -> None:
-    """Print the reference-style run summary for every input."""
+def build_summaries(cfg: Config, rdfs, hist_file_path: str) -> list:
+    """Build the reference-style run summary for every input.
+
+    Returns [(label, text), ...] — one block of text per input file.
+    """
     p = cfg.cuts
     minpt2 = max(p.minPt, 2.0)     # reference std::max(TP_minPt, 2.0f)
     maxeta25 = min(p.maxEta, 2.5)  # reference std::min(TP_maxEta, 2.5f)
+    # The text files are named by label, so record which file each came from.
+    file_of = {i.label: i.file for i in cfg.inputs}
 
+    summaries = []
     for rdf, label in rdfs:
         cols = {str(c) for c in rdf.GetColumnNames()}
         has_genuine = "trk_genuine" in cols
@@ -156,16 +166,19 @@ def print_summary(cfg: Config, rdfs, hist_file_path: str) -> None:
         ndup_v = V(ntp_ndupmatch)
 
         # ---------------------------------------------------------------
-        # print, mirroring L1TrackNtuplePlot.C
+        # assemble the text, mirroring L1TrackNtuplePlot.C
         # ---------------------------------------------------------------
-        print()
-        print(f"===== summary: {label} =====")
-        print(f"Number of events = {int(nevt)}")
-        print(f"All performance results include cuts pt > {p.minPt:g} & "
-              f"|eta| < {p.maxEta:g} unless 'no pt or eta cuts' stated.")
-        print("Only TP with stubs in at least 4 tracker layers considered")
+        lines: list[str] = []
+        emit = lines.append
 
-        print()
+        emit(f"===== summary: {label} =====")
+        emit(f"input file: {file_of.get(label, '')}")
+        emit(f"Number of events = {int(nevt)}")
+        emit(f"All performance results include cuts pt > {p.minPt:g} & "
+             f"|eta| < {p.maxEta:g} unless 'no pt or eta cuts' stated.")
+        emit("Only TP with stubs in at least 4 tracker layers considered")
+
+        emit("")
         for line in (
             _eff_line("efficiency for |eta| < 1.0", nm["eta1p0"], na["eta1p0"]),
             _eff_line("efficiency for 1.0 < |eta| < 1.75", nm["eta1p75"], na["eta1p75"]),
@@ -173,14 +186,14 @@ def print_summary(cfg: Config, rdfs, hist_file_path: str) -> None:
                       nm["eta2p5"], na["eta2p5"]),
         ):
             if line:
-                print(line)
+                emit(line)
         N_comb = na["eta1p0"] + na["eta1p75"] + na["eta2p5"]
         k_comb = nm["eta1p0"] + nm["eta1p75"] + nm["eta2p5"]
         comb = _eff_line(f"combined efficiency for |eta| < {maxeta25:g}", k_comb, N_comb)
         if comb:
-            print(f"{comb} = {int(k_comb)}/{int(N_comb)}")
+            emit(f"{comb} = {int(k_comb)}/{int(N_comb)}")
 
-        print()
+        emit("")
         for line in (
             _eff_line(f"efficiency for pt > {minpt2:g}", nm["ptg2"], na["ptg2"]),
             _eff_line(f"efficiency for {minpt2:g} < pt < 8.0", nm["pt2to8"], na["pt2to8"]),
@@ -188,30 +201,43 @@ def print_summary(cfg: Config, rdfs, hist_file_path: str) -> None:
             _eff_line("efficiency for pt > 40.0", nm["ptg40"], na["ptg40"]),
         ):
             if line:
-                print(line)
+                emit(line)
 
-        print()
+        emit("")
         if nevt > 0:
-            print(f"# TP/event (pt > {minpt2:g}) = {ntp_pt2_v / nevt:g}")
-            print(f"# TP/event (pt > 3.0) = {ntp_pt3_v / nevt:g}")
-            print(f"# TP/event (pt > 10.0) = {ntp_pt10_v / nevt:g}")
-            print(f"# tracks/event (no pt or eta cuts) = {ntrk_v / nevt:g}")
-            print(f"# tracks/event (pt > {minpt2:g}) = {ntrk_pt2_v / nevt:g}")
-            print(f"# tracks/event (pt > 3.0) = {ntrk_pt3_v / nevt:g}")
-            print(f"# tracks/event (pt > 10.0) = {ntrk_pt10_v / nevt:g}")
+            emit(f"# TP/event (pt > {minpt2:g}) = {ntp_pt2_v / nevt:g}")
+            emit(f"# TP/event (pt > 3.0) = {ntp_pt3_v / nevt:g}")
+            emit(f"# TP/event (pt > 10.0) = {ntp_pt10_v / nevt:g}")
+            emit(f"# tracks/event (no pt or eta cuts) = {ntrk_v / nevt:g}")
+            emit(f"# tracks/event (pt > {minpt2:g}) = {ntrk_pt2_v / nevt:g}")
+            emit(f"# tracks/event (pt > 3.0) = {ntrk_pt3_v / nevt:g}")
+            emit(f"# tracks/event (pt > 10.0) = {ntrk_pt10_v / nevt:g}")
 
-        print()
+        emit("")
         if has_genuine and ntrk_gen_v and ntrk_gen_v > 0:
             fake = 100.0 * (1.0 - ntrk_gen_v / ntrk_v) if ntrk_v > 0 else 0.0
-            print(f"Percentage fake tracks (no pt or eta cuts) = {fake:g}% "
-                  f"{int(ntrk_gen_v)} {int(ntrk_v)}")
+            emit(f"Percentage fake tracks (no pt or eta cuts) = {fake:g}% "
+                 f"{int(ntrk_gen_v)} {int(ntrk_v)}")
             dup = 100.0 * ndup_v / ntrk_v if ntrk_v > 0 else 0.0
-            print(f"Percentage duplicate tracks (no pt or eta cuts) = {dup:g}% "
-                  f"{int(ndup_v)} {int(ntrk_v)}")
+            emit(f"Percentage duplicate tracks (no pt or eta cuts) = {dup:g}% "
+                 f"{int(ndup_v)} {int(ntrk_v)}")
 
-        print()
+        emit("")
         z0 = _z0_res_samples(hist_file_path, label)
         if z0:
             eta1, res1, eta2, res2 = z0
-            print(f"z0 resolution = {res1:g}cm at |eta| = {eta1:g}")
-            print(f"z0 resolution = {res2:g}cm at |eta| = {eta2:g}")
+            emit(f"z0 resolution = {res1:g}cm at |eta| = {eta1:g}")
+            emit(f"z0 resolution = {res2:g}cm at |eta| = {eta2:g}")
+
+        summaries.append((label, "\n".join(lines)))
+
+    return summaries
+
+
+def print_summary(cfg: Config, rdfs, hist_file_path: str) -> list:
+    """Build the per-input summaries and echo them to the terminal."""
+    summaries = build_summaries(cfg, rdfs, hist_file_path)
+    for _, text in summaries:
+        print()
+        print(text)
+    return summaries

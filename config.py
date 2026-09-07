@@ -101,10 +101,10 @@ class ResolutionSpec:
     other_cuts: tuple[ExtraCutBlock, ...] = ()
     # How the per-x-bin resolution is defined:
     #   'interval' — half-width of the window holding a central fraction of
-    #                entries (the currently implemented method).
-    #   'rms'      — RMS of the residual projection.
-    # NOTE: only 'interval' is wired up so far; 'rms' is parsed but not yet
-    # implemented.
+    #                entries. It has no per-bin error, so the overlays are
+    #                drawn as connected-line histograms with no error bars.
+    #   'rms'      — RMS of the residual projection, drawn with markers and
+    #                RMS-error bars.
     method:     str = "interval"
 
 

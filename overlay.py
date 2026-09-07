@@ -2,12 +2,13 @@
 
 Stage 2 of the pipeline: the plot modules in plots/ load curves out of the
 intermediate output_plots.root file and hand them here as Curve objects.
-`draw_overlay()` then handles the canvas / legend / SaveAs.
+`draw_overlay()` then handles the canvas / legend and stores the canvas back
+into the ROOT file. Writing images to disk is export.py's job — it mirrors the
+whole ROOT file into the output directory in one pass.
 """
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -49,18 +50,23 @@ def draw_overlay(
     ymin: float | None = None,
     ymax: float | None = None,
     write_to: "ROOT.TDirectory | None" = None,
+    draw_opt: str = "E1",
+    legend_opt: str | None = None,
 ) -> None:
-    """Draw `curves` on one canvas, save to disk, optionally save to a TFile.
+    """Draw `curves` on one canvas and write it into a TFile directory.
 
     Parameters
     ----------
     curves
         One styled Curve per input file (and optionally per pT band, for
-        resolutions). Drawn in order, first with "E1", rest with "E1 SAME".
+        resolutions). Drawn in order, first with `draw_opt`, rest with
+        `draw_opt + " SAME"`.
     plot_key
-        Used for the canvas name and as the output filename stem.
+        Used for the canvas name (and, for the on-disk export, the filename
+        stem — see export.py).
     output
-        config.OutputSpec — provides outdir, tag, format.
+        config.OutputSpec. Accepted for interface stability; the on-disk
+        naming (outdir/tag/format) is applied by export.dump_tree().
     legend_corner
         'tr' (top-right; default — resolutions sit low) or
         'br' (bottom-right; efficiencies sit near 1).
@@ -71,8 +77,18 @@ def draw_overlay(
         Optional TDirectory inside the open output_plots.root. When given,
         the rendered TCanvas is `Write()`ten there under the name `plot_key`,
         so the overlay survives alongside the per-input hists.
+    draw_opt
+        ROOT draw option. "E1" (default) draws markers with error bars;
+        "HIST" draws the bare connected-line histogram with no error bars and
+        an unfilled base — used for interval-method resolutions, whose points
+        carry no meaningful per-bin error.
+    legend_opt
+        TLegend entry option. Defaults to "lep" for error-bar styles and "l"
+        for line-only styles, so the legend keys match what is drawn (a plain
+        line rather than a marker + error bar).
 
-    Output path:  <outdir>/<plot_key>[_<tag>].<format>
+    Images are not written here: export.dump_tree() renders every object in
+    the ROOT file, so the output directory mirrors the file's structure.
     """
     if not curves:
         print(f"[overlay] {plot_key}: no curves, skipping")
@@ -93,9 +109,14 @@ def draw_overlay(
 
     curves[0].hist.SetMinimum(ymin)
     curves[0].hist.SetMaximum(ymax)
-    curves[0].hist.Draw("E1")
+    curves[0].hist.Draw(draw_opt)
     for cu in curves[1:]:
-        cu.hist.Draw("E1 SAME")
+        cu.hist.Draw(f"{draw_opt} SAME")
+
+    # An "E"-less draw option paints no markers or error bars, so a "lep"
+    # legend key would advertise both. Fall back to a plain line key.
+    if legend_opt is None:
+        legend_opt = "lep" if "E" in draw_opt.upper().replace("HIST", "") else "l"
 
     # legend placement. Width scales with the longest label so entries like
     # "NEWKF MERGE  nstub == 4" aren't clipped; clamp so it can't grow past
@@ -116,20 +137,14 @@ def draw_overlay(
     legend.SetFillColor(0)
     legend.SetTextSize(0.03)
     for cu in curves:
-        legend.AddEntry(cu.hist, cu.label, "lep")
+        legend.AddEntry(cu.hist, cu.label, legend_opt)
     legend.Draw()
 
     c.Update()
 
-    tag = f"_{output.tag}" if output.tag else ""
-    out_path = os.path.join(output.outdir, f"{plot_key}{tag}.{output.format}")
-    # plot_key may contain '/' (e.g. extra-cut blocks live in sub-dirs), so
-    # create the full parent path, not just output.outdir.
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    c.SaveAs(out_path)
-    print(f"[overlay] wrote {out_path}")
-
     if write_to is not None:
         write_to.cd()
         # ROOT key names can't contain '/', so flatten any sub-dir path.
-        c.Write(plot_key.replace("/", "_"))
+        # kOverwrite replaces the previous key instead of appending a new write
+        # cycle, so re-running stage 2 (--no-fill) doesn't grow the file.
+        c.Write(plot_key.replace("/", "_"), ROOT.TObject.kOverwrite)

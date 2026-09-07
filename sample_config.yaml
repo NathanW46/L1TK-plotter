@@ -39,9 +39,12 @@ efficiency:
 # ---------------------------------------------------------------------
 # resolution: residuals x x-axes.
 #
-# method: how the per-x-bin resolution is defined:
-#   'interval' — half-width of the window holding 68% of entries
-#   'rms'      — RMS of the residual distribution
+# method: how the per-x-bin resolution is defined. It also picks the draw
+# style, since only one of the two has a meaningful per-bin error:
+#   'interval' — half-width of the window holding 68% of entries;
+#                drawn as a connected-line histogram, no error bars
+#   'rms'      — RMS of the residual distribution;
+#                drawn with markers and RMS-error bars
 #
 # Each residual block:
 #   [key, residual_expr, extra_cut, nbins, lo, hi, ylabel, title]

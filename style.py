@@ -25,6 +25,9 @@ def style_hist(h, i, xlabel, ylabel, title):
     h.SetMarkerStyle(MARKERS[i % len(MARKERS)])
     h.SetMarkerSize(0.72)
     h.SetLineWidth(2)
+    # Hollow base: overlays read as outlines, so nothing should paint a solid
+    # block under the curve when it is drawn with "HIST".
+    h.SetFillStyle(0)
     h.GetXaxis().SetTitle(xlabel)
     h.GetYaxis().SetTitle(ylabel)
     h.GetYaxis().SetTitleOffset(1.8)

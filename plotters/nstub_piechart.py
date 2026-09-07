@@ -225,7 +225,8 @@ def load(cfg: Config, in_dir, labels: list[str], write_to=None
     nstub_outdir = os.path.join(out.outdir, "nstub")
     os.makedirs(nstub_outdir, exist_ok=True)
 
-    srcs = []  # (label, sub-dir, stored TCanvas) for the combined canvas
+    srcs = []      # (label, sub-dir, stored TCanvas) for the combined canvas
+    snapshots = 0  # inputs whose canvas a previous run already replaced
     for label in labels:
         sub = in_dir.GetDirectory(clean_label(label))
         if not sub:
@@ -234,6 +235,13 @@ def load(cfg: Config, in_dir, labels: list[str], write_to=None
         canvas = sub.Get("nstub_pie")
         if not canvas:
             print(f"[load] missing nstub_pie in {label!r}")
+            continue
+        if not isinstance(canvas, ROOT.TCanvas):
+            # An earlier stage-2 run already swapped the canvas for its TImage
+            # snapshot (see _store_snapshot), so there are no primitives left to
+            # re-render from. The images are still in the file and still get
+            # exported; only a re-fill can regenerate the vector versions.
+            snapshots += 1
             continue
 
         out_path = os.path.join(
@@ -273,6 +281,10 @@ def load(cfg: Config, in_dir, labels: list[str], write_to=None
         combined.SaveAs(combo_path)  # vector combined
         _store_snapshot(combined, write_to, "nstub_pies")  # circular in ROOT file
         print(f"[nstub] wrote {combo_path}  (combined, {n} inputs)")
+
+    if snapshots:
+        print(f"[nstub] {snapshots} pie(s) already stored as snapshots "
+              "(re-run without --no-fill to redraw them)")
 
     # Replace each per-input canvas in the ROOT file with a circular bitmap.
     # Done after the combined build, which needed the canvases' primitives.
