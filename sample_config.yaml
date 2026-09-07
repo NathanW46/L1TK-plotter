@@ -1,13 +1,13 @@
 # =====================================================================
-# config.yaml — L1Track plotter config
+# sample_config.yaml — L1Track plotter config
 #
 # Run:
-#   python -m plotter --config config.yaml             # both stages
-#   python -m plotter --config config.yaml --no-overlay  # fill only
-#   python -m plotter --config config.yaml --no-fill     # overlay only
+#   python main.py --config sample_config.yaml               # both stages
+#   python main.py --config sample_config.yaml --no-overlay  # fill only
+#   python main.py --config sample_config.yaml --no-fill     # overlay only
 #
 # Override any value from the CLI:
-#   python -m plotter --config config.yaml --minPt 3.0 --tag v2
+#   python main.py --config sample_config.yaml --minPt 3.0 --tag v2
 # =====================================================================
 
 
@@ -17,16 +17,9 @@ cuts:
   maxEta:      2.5       # |tp_eta| cut
   minNstub:    4         # matchtrk_nstub cut
   maxD0:       15        # |tp_d0|  cut [cm]
-  maxLxy:      10        # |tp_lxy|  cut [cm]
+  maxLxy:      10        # |tp_lxy| cut [cm]
   maxLz:       60        # |tp_lz|  cut [cm]
   primaryOnly: false     # require tp_eventid == 0
-
-# Resolution-specific: extra pT-band splits. NOT IMPLEMENTED
-# Options: none | low | high | both
-# 'low'  -> additionally emit a curve restricted to tp_pt <  8 GeV
-# 'high' -> additionally emit a curve restricted to tp_pt >= 8 GeV
-# 'both' -> emit both
-# ptSplit: both
 
 
 # ---------------------------------------------------------------------
@@ -37,55 +30,57 @@ cuts:
 # ---------------------------------------------------------------------
 efficiency:
   variables:
-    - ["tp_eta", 50, -2.5,  2.5,  "Tracking particle #eta",        "eta"]
-    - ["tp_phi", 32, -3.2,  3.2,  "Tracking particle #phi [rad]",  "phi"]
-    - ["tp_z0",  50, -25.0, 25.0, "Tracking particle z_{0} [cm]",  "z0" ]
-    - ["tp_d0",  100, -15.0,  15.0,  "Tracking particle d_{0} [cm]",  "d0" ]
-    - ["tp_pt",  47, 0,  100,  "Tracking particle p_T [GeV]",  "pt" ]
+    - ["tp_eta", 50, -2.5,  2.5,  "Tracking particle #eta",       "eta"]
+    - ["tp_phi", 32, -3.2,  3.2,  "Tracking particle #phi [rad]", "phi"]
+    - ["tp_z0",  50, -25.0, 25.0, "Tracking particle z_{0} [cm]", "z0" ]
+    - ["tp_d0",  100, -15.0, 15.0, "Tracking particle d_{0} [cm]", "d0" ]
+    - ["tp_pt",  47, 0,     100,   "Tracking particle p_{T} [GeV]", "pt" ]
 
 # ---------------------------------------------------------------------
-# resolution: residuals × x-axes.
+# resolution: residuals x x-axes.
+#
+# method: how the per-x-bin resolution is defined:
+#   'interval' — half-width of the window holding 68% of entries
+#   'rms'      — RMS of the residual distribution
+#
 # Each residual block:
 #   [key, residual_expr, extra_cut, nbins, lo, hi, ylabel, title]
-# extra_cut is ANDed onto the standard match cuts (e.g. d0 sentinel filter).
+#   extra_cut is ANDed onto the standard match cuts (e.g. a d0 sentinel filter).
 #
 # Each x_axis block:
 #   [key, x_expr, nbins, xlo, xhi, xlabel]
 # Plots are produced for the Cartesian product (residual, x_axis).
 #
-# Each extra cut block makes a seperate directory with the listed cuts overlayed together
-# overlay_bool is whether to overlay with the other root files
-  # for example, to make a plot with 3 lines, there would be somethign like this:
-    # ["nstub", false, [["nstub >= 5", "matchtrk_nstub >= 5"], ["matchtrk_nstub >= 6"], 
-#   [key, overlay_bool, [[key1, cut 1, cut 2, ...], [key2, cut 1, cut2, ...], ...]]
+# other_cuts: extra-cut blocks. Each block makes its own sub-directory whose
+# cut groups are overlaid together:
+#   [block_key, overlay_across_inputs, [[group_key, cut, cut, ...], ...]]
+# overlay_across_inputs = true also overlays the groups across the input files.
 # ---------------------------------------------------------------------
 resolution:
-  # How resolution is defined per x-bin: 'interval' (half-width of the window
-  # holding 68% of entries) or 'rms'.
   method: interval
   residuals:
-    - ["pt", "(matchtrk_pt - tp_pt) / tp_pt", "",                  400,  -1.0,  1.0, "p_{T} resolution / p_{T}",   "p_{T} resolution"]
-    - ["eta",        "matchtrk_eta - tp_eta", "",                  400, -0.05, 0.05,          "#eta resolution",    "#eta resolution"]
-    - ["phi",        "matchtrk_phi - tp_phi", "",                  400, -0.05, 0.05,    "#phi resolution [rad]",    "#phi resolution"]
-    - ["z0",           "matchtrk_z0 - tp_z0", "",                  400,  -5.0,  5.0,    "z_{0} resolution [cm]",   "z_{0} resolution"]
-    - ["d0",           "matchtrk_d0 - tp_d0", "matchtrk_d0 < 999", 400,  -0.5,  0.5,    "d_{0} resolution [cm]",   "d_{0} resolution"]
+    - ["pt",  "(matchtrk_pt - tp_pt) / tp_pt", "",                  400, -1.0,  1.0,  "p_{T} resolution / p_{T}", "p_{T} resolution"]
+    - ["eta", "matchtrk_eta - tp_eta",         "",                  400, -0.05, 0.05, "#eta resolution",          "#eta resolution"]
+    - ["phi", "matchtrk_phi - tp_phi",         "",                  400, -0.05, 0.05, "#phi resolution [rad]",    "#phi resolution"]
+    - ["z0",  "matchtrk_z0 - tp_z0",           "",                  400, -5.0,  5.0,  "z_{0} resolution [cm]",    "z_{0} resolution"]
+    - ["d0",  "matchtrk_d0 - tp_d0",           "matchtrk_d0 < 999", 400, -0.5,  0.5,  "d_{0} resolution [cm]",    "d_{0} resolution"]
   x_axes:
-    - ["eta", "abs(tp_eta)", 25,   0.0,    2.5,   "|#eta|"]
-    - ["pt",  "tp_pt",       20,   0.0,  100.0,   "p_{T} [GeV]"]
-    - ["z0",  "tp_z0",       30, -15.0,   15.0,   "z_{0} [cm]"]
-    - ["d0",  "tp_d0",       30, -15.0,   15.0,   "d_{0} [cm]"]
+    - ["eta", "abs(tp_eta)", 25,   0.0,    2.5, "|#eta|"]
+    - ["pt",  "tp_pt",       20,   0.0,  100.0, "p_{T} [GeV]"]
+    - ["z0",  "tp_z0",       30, -15.0,   15.0, "z_{0} [cm]"]
+    - ["d0",  "tp_d0",       30, -15.0,   15.0, "d_{0} [cm]"]
 
   other_cuts:
     - ["nstub", false,
-        [ ["nstub = 4", "matchtrk_nstub == 4"],
-          ["nstub = 5", "matchtrk_nstub == 5"],
+        [ ["nstub = 4",  "matchtrk_nstub == 4"],
+          ["nstub = 5",  "matchtrk_nstub == 5"],
           ["nstub >= 6", "matchtrk_nstub >= 6"] ]]
 
 
-# Inputs: Make plots for each entry under `files`.
-# `label` is the legend text.
-# `base_path` (optional): prepended to every `file` below, so you can set the
-#   shared directory once and list bare filenames.
+# Inputs: make plots for each entry under `files`.
+#   label     : legend text.
+#   base_path : optional; prepended to every `file` below, so the shared
+#               directory is set once and files are listed by bare name.
 # (A plain list of entries — without base_path/files — is also accepted.)
 inputs:
   base_path: ""
@@ -97,9 +92,9 @@ inputs:
 
 # Output:
 #   hist_file : stage-1 ROOT file (filled hists)
-#   outdir    : where overlayed hists are output as PDFs/PNGs.
-#   tag       : optional suffix appended to plot filenames.
-#   format    : 'pdf' or 'png'.
+#   outdir    : where overlaid plots are written (PDF/PNG)
+#   tag       : optional suffix appended to plot filenames
+#   format    : 'pdf' or 'png'
 output:
   hist_file: "histograms.root"
   outdir:    "plots"

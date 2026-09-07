@@ -49,6 +49,11 @@ except ImportError:
     nstub_piechart = None
 
 try:
+    from plotters import summary as summary_mod
+except ImportError:
+    summary_mod = None
+
+try:
     import overlay as overlay_mod
 except ImportError:
     overlay_mod = None
@@ -216,6 +221,11 @@ def main() -> None:
                   "(need >= 2 to overlay)")
         else:
             stage_overlay(cfg, only)
+
+    # End-of-run summary printout (mirrors L1TrackNtuplePlot.C), per input.
+    if summary_mod is not None:
+        rdfs = [(rdfio.open_rdf(i.file), i.label) for i in cfg.inputs]
+        summary_mod.print_summary(cfg, rdfs, cfg.output.hist_file)
 
 
 if __name__ == "__main__":
