@@ -23,10 +23,23 @@ cuts:
 
 
 # ---------------------------------------------------------------------
-# efficiency: which efficiency plots to produce.
-# Each variable is a positional block:
+# efficiency: which efficiency plots to produce. Each plot is a TEfficiency
+# (Clopper-Pearson 68.3% intervals), drawn as points with asymmetric errors.
+#
+# Each variable is a positional block of uniform bins:
 #   [branch, nbins, xlo, xhi, xlabel, key]
 # key names both the output file (eff_<key>.pdf) and is used in titles.
+#
+# For variable-width bins, write the entry as a mapping and list the edges
+# instead of nbins/xlo/xhi (nbins/xlo/xhi are then derived from them):
+#   - {branch: "tp_pt", edges: [0, 2, 3, 5, 8, 15, 30, 60, 100],
+#      xlabel: "Tracking particle p_{T} [GeV]", key: "pt"}
+#
+# For a signed quantity, add `mirror: true` to reflect the edges about 0, so
+# only the positive half has to be written out. The edges below become
+# [-15, -10, -5, -2, -1, 0, 1, 2, 5, 10, 15]:
+#   - {branch: "tp_d0", edges: [0, 1, 2, 5, 10, 15], mirror: true,
+#      xlabel: "Tracking particle d_{0} [cm]", key: "d0"}
 # ---------------------------------------------------------------------
 efficiency:
   variables:

@@ -51,6 +51,11 @@ class EffVariable(NamedTuple):
     hi:    float
     xlabel: str
     key:   str
+    # Explicit bin edges, for variable-width binning. Empty means the uniform
+    # (nbins, lo, hi) binning above. When edges ARE given the loader derives
+    # nbins/lo/hi from them, so code that only cares about the range can keep
+    # reading those three fields either way.
+    edges: tuple = ()
 
 
 class ResResidual(NamedTuple):
@@ -157,6 +162,84 @@ def _parse_blocks(blocks, nt_cls, section_name: str):
     return tuple(out)
 
 
+# The positional (list) form of an efficiency.variables entry. `edges` is only
+# reachable through the mapping form, so it isn't part of this.
+_EFF_POSITIONAL = ("branch", "nbins", "lo", "hi", "xlabel", "key")
+
+
+def _eff_variable_from_mapping(block: dict, where: str) -> EffVariable:
+    """Build an EffVariable from the named-mapping form of a variables entry."""
+    known = set(_EFF_POSITIONAL) | {"edges", "mirror"}
+    unknown = set(block) - known
+    _require(not unknown, f"unknown key(s) in {where}: {sorted(unknown)}")
+    for k in ("branch", "xlabel", "key"):
+        _require(k in block, f"{where} needs a '{k}'")
+
+    mirror = block.get("mirror", False)
+    _require(isinstance(mirror, bool),
+             f"{where}.mirror must be true/false; got {mirror!r}")
+
+    edges = block.get("edges")
+    if edges is None:
+        _require(not mirror, f"{where}.mirror only applies alongside 'edges'")
+        for k in ("nbins", "lo", "hi"):
+            _require(k in block,
+                     f"{where} needs either 'edges' or all of nbins/lo/hi")
+        return EffVariable(branch=block["branch"], nbins=block["nbins"],
+                           lo=block["lo"], hi=block["hi"],
+                           xlabel=block["xlabel"], key=block["key"])
+
+    _require(not ({"nbins", "lo", "hi"} & set(block)),
+             f"{where} gives 'edges', so it must not also give nbins/lo/hi")
+    _require(isinstance(edges, (list, tuple)) and len(edges) >= 2,
+             f"{where}.edges must list at least 2 bin edges; got {edges!r}")
+    _require(all(isinstance(e, (int, float)) and not isinstance(e, bool)
+                 for e in edges),
+             f"{where}.edges must all be numbers; got {edges!r}")
+    edges = tuple(float(e) for e in edges)
+    _require(all(a < b for a, b in zip(edges, edges[1:])),
+             f"{where}.edges must be strictly increasing; got {list(edges)}")
+
+    if mirror:
+        # Reflect the edges about 0 and merge, so a signed quantity (d0, z0,
+        # eta) only needs its positive half written out. Duplicates collapse,
+        # so an edge list that already straddles 0 is left as it is. `or 0.0`
+        # keeps a mirrored 0.0 from becoming -0.0.
+        edges = tuple(sorted(set(edges) | {-e or 0.0 for e in edges}))
+
+    # Derive the uniform-binning fields so downstream code can read either.
+    return EffVariable(branch=block["branch"], nbins=len(edges) - 1,
+                       lo=edges[0], hi=edges[-1], xlabel=block["xlabel"],
+                       key=block["key"], edges=edges)
+
+
+def _parse_eff_variables(blocks, section_name: str):
+    """Parse efficiency.variables. Each entry is either
+
+        [branch, nbins, lo, hi, xlabel, key]            uniform bins
+        {branch:, edges: [...], xlabel:, key:}          variable-width bins
+
+    The mapping form also accepts nbins/lo/hi in place of edges, for when the
+    named spelling just reads better, and `mirror: true` alongside edges to
+    reflect them about 0 for a signed quantity.
+    """
+    out = []
+    n_expected = len(_EFF_POSITIONAL)
+    for i, block in enumerate(blocks or []):
+        where = f"{section_name}[{i}]"
+        if isinstance(block, dict):
+            out.append(_eff_variable_from_mapping(block, where))
+            continue
+        _require(
+            isinstance(block, (list, tuple)) and len(block) == n_expected,
+            f"{where} must be a list of {n_expected} items "
+            f"({list(_EFF_POSITIONAL)}) or a mapping with 'edges'; "
+            f"got {block!r}",
+        )
+        out.append(EffVariable(*block))
+    return tuple(out)
+
+
 def _parse_other_cuts(blocks, section_name: str):
     """Parse resolution.other_cuts into a tuple of ExtraCutBlock.
 
@@ -229,8 +312,8 @@ def load_config(path: str) -> Config:
 
     eff_raw = raw.get("efficiency") or {}
     efficiency = EfficiencySpec(
-        variables=_parse_blocks(eff_raw.get("variables"), EffVariable,
-                                "efficiency.variables"),
+        variables=_parse_eff_variables(eff_raw.get("variables"),
+                                       "efficiency.variables"),
     )
 
     res_raw = raw.get("resolution") or {}

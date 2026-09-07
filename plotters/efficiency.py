@@ -10,12 +10,22 @@ worked example.
 
 from __future__ import annotations
 
+from array import array
+
 from config import Config
 from overlay import Curve
 import style
 
 import ROOT
 ROOT.EnableImplicitMT()
+
+
+def _model(name, title, x):
+    """TH1DModel for one efficiency variable, uniform or variable-width."""
+    if x.edges:
+        return ROOT.RDF.TH1DModel(name, title, len(x.edges) - 1,
+                                  array("d", x.edges))
+    return ROOT.RDF.TH1DModel(name, title, x.nbins, x.lo, x.hi)
 
 
 def clean_label(label):
@@ -90,16 +100,11 @@ def fill(cfg: Config, rdfs, out_dir) -> None:
             rfx = (rf.Define(f"den_{x.key}", f"{x.branch}[{den_mask}]")
                      .Define(f"num_{x.key}", f"{x.branch}[{den_mask} && tp_match]"))
 
-            model_num = ROOT.RDF.TH1DModel(
-                        f"h_matched_{x.key}", f";matched {x.key};counts",
-                        x.nbins, x.lo, x.hi,
-                    )
+            model_num = _model(f"h_matched_{x.key}",
+                               f";matched {x.key};counts", x)
             h_num = rfx.Histo1D(model_num, f"num_{x.key}").GetValue()
 
-            model_den = ROOT.RDF.TH1DModel(
-                        f"h_tp_{x.key}", f";{x.xlabel};counts",
-                        x.nbins, x.lo, x.hi,
-                    )
+            model_den = _model(f"h_tp_{x.key}", f";{x.xlabel};counts", x)
             h_den = rfx.Histo1D(model_den, f"den_{x.key}").GetValue()
 
             h_num.Sumw2()
